@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BTC DCA Tracker — Stack Sats</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Sora:wght@300;400;600;700;800&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<style>
+:root {
+  --bg: #0a0a0f; --bg-card: #12121a; --bg-elevated: #1a1a25;
+  --border: #2a2a38; --border-light: #3a3a4a;
+  --text: #f0f0f5; --text-dim: #8a8aa0; --text-muted: #5a5a70;
+  --orange: #f7931a; --orange-glow: rgba(247, 147, 26, 0.15);
+  --green: #4ade80; --red: #f87171; --yellow: #facc15; --blue: #60a5fa;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Noto Sans Thai', 'Sora', sans-serif;
+  background: var(--bg); color: var(--text); min-height: 100vh;
+  background-image:
+    radial-gradient(circle at 15% 0%, rgba(247, 147, 26, 0.08) 0%, transparent 40%),
+    radial-gradient(circle at 85% 30%, rgba(247, 147, 26, 0.04) 0%, transparent 40%),
+    linear-gradient(180deg, #0a0a0f 0%, #0d0d14 100%);
+  background-attachment: fixed;
+}
+.mono { font-family: 'JetBrains Mono', monospace; font-feature-settings: "tnum"; }
+
+.app-header {
+  border-bottom: 1px solid var(--border);
+  padding: 18px 28px;
+  display: flex; justify-content: space-between; align-items: center;
+  backdrop-filter: blur(20px);
+  background: rgba(10,10,15,0.75);
+  position: sticky; top: 0; z-index: 100;
+}
+.logo { display: flex; align-items: center; gap: 12px; }
+.logo-icon {
+  width: 38px; height: 38px;
+  background: linear-gradient(135deg, var(--orange) 0%, #ff6b00 100%);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Sora', sans-serif; font-weight: 800; color: #fff; font-size: 20px;
+  box-shadow: 0 0 24px var(--orange-glow);
+}
+.logo-text { font-family: 'Sora', sans-serif; font-weight: 700; font-size: 17px; letter-spacing: -0.01em; }
+.logo-text span { color: var(--orange); }
+.logo-sub { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-muted); letter-spacing: 0.15em; text-transform: uppercase; margin-top: 2px; }
+
+.header-right { display: flex; align-items: center; gap: 12px; }
+.sync-status {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 11px; color: var(--text-dim);
+}
+.sync-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); }
+.sync-dot.connected { background: var(--green); animation: pulse 2s ease-in-out infinite; }
+.sync-dot.syncing { background: var(--yellow); animation: spin 1s linear infinite; }
+.sync-dot.error { background: var(--red); }
+
+.price-ticker {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.price-label { font-size: 10px; letter-spacing: 0.15em; color: var(--text-muted); text-transform: uppercase; }
+.price-value { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 15px; color: var(--orange); }
+.icon-btn { background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 4px; border-radius: 4px; transition: all 0.2s; display: flex; align-items: center; }
+.icon-btn:hover { color: var(--orange); }
+.icon-btn.spinning { animation: spin 1s linear infinite; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+.container { max-width: 1400px; margin: 0 auto; padding: 32px 28px 80px; }
+
+.setup-screen { max-width: 600px; margin: 60px auto; padding: 0 20px; }
+.setup-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 32px; }
+.setup-title { font-family: 'Sora', sans-serif; font-weight: 800; font-size: 28px; letter-spacing: -0.02em; margin-bottom: 8px; }
+.setup-title span { color: var(--orange); }
+.setup-sub { color: var(--text-dim); font-size: 14px; margin-bottom: 28px; line-height: 1.6; }
+.setup-step { display: flex; gap: 14px; margin-bottom: 14px; padding: 14px; background: var(--bg-elevated); border-radius: 10px; border-left: 3px solid var(--orange); }
+.setup-step-num { font-family: 'Sora', sans-serif; font-weight: 800; font-size: 18px; color: var(--orange); line-height: 1; min-width: 24px; }
+.setup-step-text { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+.setup-step-text strong { color: var(--text); }
+.setup-step-text code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-size: 11px; color: var(--orange); word-break: break-all; }
+
+.hero { margin-bottom: 32px; }
+.hero-title { font-family: 'Sora', sans-serif; font-size: 13px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
+.hero-headline { font-family: 'Sora', sans-serif; font-weight: 800; font-size: 48px; line-height: 1.1; letter-spacing: -0.03em; margin-bottom: 6px; }
+.hero-headline .accent { color: var(--orange); }
+.hero-sub { color: var(--text-dim); font-size: 14px; }
+
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
+@media (max-width: 900px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 500px) { .stats-grid { grid-template-columns: 1fr; } }
+
+.stat-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; transition: border-color 0.2s; }
+.stat-card:hover { border-color: var(--border-light); }
+.stat-card.highlight { background: linear-gradient(135deg, var(--bg-card) 0%, rgba(247,147,26,0.06) 100%); border-color: rgba(247,147,26,0.25); }
+.stat-label { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px; }
+.stat-value { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 24px; letter-spacing: -0.02em; margin-bottom: 4px; }
+.stat-value.large { font-size: 28px; }
+.stat-sub { font-size: 12px; color: var(--text-dim); }
+.stat-sub .pos { color: var(--green); }
+.stat-sub .neg { color: var(--red); }
+
+.tabs { display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.tab { padding: 12px 18px; background: none; border: none; color: var(--text-dim); font-family: 'Sora', sans-serif; font-weight: 500; font-size: 14px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.2s; white-space: nowrap; }
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--orange); border-bottom-color: var(--orange); }
+
+.panel { display: none; }
+.panel.active { display: block; }
+
+.chart-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px; }
+@media (max-width: 900px) { .chart-grid { grid-template-columns: 1fr; } }
+.chart-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+.chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.chart-title { font-family: 'Sora', sans-serif; font-weight: 600; font-size: 15px; }
+.chart-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-dim); }
+.chart-body { position: relative; height: 280px; }
+.chart-body.tall { height: 360px; }
+
+.heatmap-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin-bottom: 16px; overflow-x: auto; }
+.heatmap-month-label { font-family: 'Sora', sans-serif; font-weight: 600; font-size: 12px; color: var(--text-dim); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.08em; }
+.heatmap-grid { display: grid; gap: 3px; }
+.heatmap-cell { aspect-ratio: 1; border-radius: 3px; background: var(--bg-elevated); cursor: pointer; transition: transform 0.1s; }
+.heatmap-cell:hover { transform: scale(1.4); z-index: 10; }
+.heatmap-cell.empty { background: rgba(255,255,255,0.02); }
+.heatmap-legend { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 11px; color: var(--text-muted); justify-content: flex-end; }
+.heatmap-legend-cells { display: flex; gap: 3px; }
+.heatmap-legend-cells .heatmap-cell { width: 12px; height: 12px; }
+
+.tooltip { position: fixed; background: #000; border: 1px solid var(--border-light); padding: 8px 12px; border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 11px; pointer-events: none; z-index: 1000; display: none; white-space: nowrap; }
+
+.form-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 24px; margin-bottom: 16px; }
+.form-title { font-family: 'Sora', sans-serif; font-weight: 600; font-size: 16px; margin-bottom: 16px; }
+.form-row { display: grid; grid-template-columns: repeat(4, 1fr) auto; gap: 12px; align-items: end; }
+@media (max-width: 700px) { .form-row { grid-template-columns: 1fr 1fr; } }
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); }
+.form-input { background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text); padding: 10px 12px; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 14px; outline: none; transition: border-color 0.2s; width: 100%; }
+.form-input:focus { border-color: var(--orange); }
+
+.btn { padding: 10px 18px; background: var(--orange); color: #000; border: none; border-radius: 8px; font-family: 'Sora', sans-serif; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+.btn:hover { background: #ffa733; transform: translateY(-1px); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--border); }
+.btn-ghost:hover { background: var(--bg-elevated); color: var(--text); transform: none; }
+.btn-danger { background: transparent; color: var(--red); border: 1px solid rgba(248,113,113,0.3); }
+.btn-danger:hover { background: rgba(248,113,113,0.1); transform: none; }
+.btn-block { width: 100%; }
+
+.table-wrap { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.table-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 10px; }
+.table-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.records-table { width: 100%; border-collapse: collapse; }
+.records-table th { text-align: left; padding: 12px 20px; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; background: var(--bg-elevated); border-bottom: 1px solid var(--border); position: sticky; top: 0; }
+.records-table td { padding: 12px 20px; font-family: 'JetBrains Mono', monospace; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+.records-table tr:hover td { background: rgba(255,255,255,0.02); }
+.records-table .num-col { text-align: right; }
+.records-table .actions-col { text-align: right; width: 60px; }
+.records-table .delete-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 16px; padding: 4px 8px; border-radius: 4px; }
+.records-table .delete-btn:hover { color: var(--red); background: rgba(248,113,113,0.1); }
+.table-scroll { max-height: 600px; overflow-y: auto; }
+
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text-dim); }
+
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--bg-elevated); border: 1px solid var(--border-light); padding: 12px 20px; border-radius: 10px; font-size: 13px; z-index: 1000; transition: transform 0.3s; box-shadow: 0 10px 30px rgba(0,0,0,0.5); max-width: 90%; }
+.toast.show { transform: translateX(-50%) translateY(0); }
+.toast.success { border-left: 3px solid var(--green); }
+.toast.error { border-left: 3px solid var(--red); }
+.toast.info { border-left: 3px solid var(--blue); }
+
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 200; backdrop-filter: blur(4px); padding: 20px; }
+.modal-overlay.show { display: flex; }
+.modal { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 24px; max-width: 420px; width: 100%; }
+.modal-title { font-family: 'Sora', sans-serif; font-weight: 700; font-size: 18px; margin-bottom: 8px; }
+.modal-text { color: var(--text-dim); font-size: 14px; margin-bottom: 20px; line-height: 1.5; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+.bg-grain::before { content: ''; position: fixed; inset: 0; pointer-events: none; opacity: 0.015; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); z-index: 1; }
+
+@media (max-width: 600px) {
+  .hero-headline { font-size: 32px; }
+  .container { padding: 20px 16px 60px; }
+  .app-header { padding: 14px 16px; }
+  .price-ticker { padding: 6px 10px; gap: 8px; }
+  .price-value { font-size: 13px; }
+  .stat-value { font-size: 20px; }
+  .form-row { grid-template-columns: 1fr; }
+  .header-right { gap: 6px; }
+  .sync-status { padding: 4px 8px; font-size: 10px; }
+}
+</style>
+</head>
+<body class="bg-grain">
+
+<!-- Setup Screen -->
+<div id="setup-screen" class="setup-screen" style="display:none">
+  <div class="setup-card">
+    <div class="setup-title">Stack <span>Sats</span> 🟠</div>
+    <div class="setup-sub">เชื่อมเว็บกับ Google Sheet เพื่อ sync ข้อมูลข้ามอุปกรณ์</div>
+
+    <div class="setup-step">
+      <div class="setup-step-num">1</div>
+      <div class="setup-step-text"><strong>เปิด Google Sheet ของคุณ</strong> และตั้งค่า Apps Script ตามคู่มือ <code>SETUP_GUIDE.md</code></div>
+    </div>
+    <div class="setup-step">
+      <div class="setup-step-num">2</div>
+      <div class="setup-step-text"><strong>Copy Web App URL</strong> ที่ได้หลัง Deploy<br>รูปแบบ: <code>https://script.google.com/macros/s/.../exec</code></div>
+    </div>
+    <div class="setup-step">
+      <div class="setup-step-num">3</div>
+      <div class="setup-step-text"><strong>กรอก URL + Password</strong> ด้านล่าง แล้วกด Connect</div>
+    </div>
+
+    <div class="form-group" style="margin-top: 20px">
+      <label class="form-label">Web App URL</label>
+      <input type="text" class="form-input" id="setup-url" placeholder="https://script.google.com/macros/s/.../exec">
+    </div>
+    <div class="form-group" style="margin-top: 12px">
+      <label class="form-label">Password (จาก Code.gs)</label>
+      <input type="password" class="form-input" id="setup-password" placeholder="password ที่ตั้งไว้ใน Code.gs">
+    </div>
+    <button class="btn btn-block" id="setup-connect" style="margin-top: 20px">🔗 Connect to Google Sheet</button>
+    <div id="setup-status" style="margin-top: 12px; font-size: 13px; text-align: center; color: var(--text-dim)"></div>
+  </div>
+</div>
+
+<!-- Main App -->
+<div id="main-app" style="display:none">
+<header class="app-header">
+  <div class="logo">
+    <div class="logo-icon">₿</div>
+    <div>
+      <div class="logo-text">Stack <span>Sats</span></div>
+      <div class="logo-sub">DCA Tracker</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="sync-status" id="sync-status">
+      <span class="sync-dot" id="sync-dot"></span>
+      <span id="sync-text">—</span>
+    </div>
+    <div class="price-ticker">
+      <span class="price-label">BTC</span>
+      <span class="price-value" id="ticker-price">—</span>
+      <button class="icon-btn" id="refresh-price" title="Refresh">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 22v-6h6"/><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 2v6h-6"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <div class="hero">
+    <div class="hero-title">Portfolio Overview</div>
+    <h1 class="hero-headline">Stacking <span class="accent">sats</span> since day one.</h1>
+    <p class="hero-sub">Synced กับ Google Sheet — บันทึกที่ไหนก็ขึ้นทุกที่</p>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card highlight">
+      <div class="stat-label">⚡ Total Sats</div>
+      <div class="stat-value large mono" id="stat-sats">—</div>
+      <div class="stat-sub mono"><span id="stat-btc">—</span> BTC</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">💰 Total Cost</div>
+      <div class="stat-value large mono" id="stat-cost">—</div>
+      <div class="stat-sub">THB invested</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">📊 Avg Cost/BTC</div>
+      <div class="stat-value mono" id="stat-avg">—</div>
+      <div class="stat-sub" id="stat-avg-sub">vs market —</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">📈 Portfolio Value</div>
+      <div class="stat-value mono" id="stat-value">—</div>
+      <div class="stat-sub mono" id="stat-pnl">—</div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="dashboard">Dashboard</button>
+    <button class="tab" data-tab="add">Add Entry</button>
+    <button class="tab" data-tab="records">Records</button>
+    <button class="tab" data-tab="settings">Settings</button>
+  </div>
+
+  <div class="panel active" id="panel-dashboard">
+    <div class="chart-grid">
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">📊 Sats Accumulated Over Time</div>
+          <div class="chart-meta" id="chart1-meta"></div>
+        </div>
+        <div class="chart-body tall"><canvas id="chart-cumulative"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">📅 Monthly DCA</div>
+          <div class="chart-meta">THB / month</div>
+        </div>
+        <div class="chart-body tall"><canvas id="chart-monthly"></canvas></div>
+      </div>
+    </div>
+
+    <div class="chart-card" style="margin-bottom: 16px;">
+      <div class="chart-header">
+        <div class="chart-title">📉 Average Cost vs Market Price</div>
+        <div class="chart-meta">THB per BTC</div>
+      </div>
+      <div class="chart-body"><canvas id="chart-avgcost"></canvas></div>
+    </div>
+
+    <div class="heatmap-card">
+      <div class="chart-header">
+        <div class="chart-title">🔥 DCA Activity Heatmap</div>
+        <div class="chart-meta" id="heatmap-meta"></div>
+      </div>
+      <div id="heatmap-container"></div>
+      <div class="heatmap-legend">
+        <span>น้อย</span>
+        <div class="heatmap-legend-cells">
+          <div class="heatmap-cell" style="background:#1a1a25"></div>
+          <div class="heatmap-cell" style="background:rgba(247,147,26,0.25)"></div>
+          <div class="heatmap-cell" style="background:rgba(247,147,26,0.5)"></div>
+          <div class="heatmap-cell" style="background:rgba(247,147,26,0.75)"></div>
+          <div class="heatmap-cell" style="background:#f7931a"></div>
+        </div>
+        <span>มาก</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-add">
+    <div class="form-card">
+      <div class="form-title">➕ บันทึกการ DCA ใหม่</div>
+      <form id="add-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Date</label>
+            <input type="date" class="form-input" id="in-date" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">THB</label>
+            <input type="number" class="form-input" id="in-thb" step="0.01" placeholder="100.00" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Sats ⚡</label>
+            <input type="number" class="form-input" id="in-sat" placeholder="4500" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Price/BTC <span style="color:var(--text-muted);font-size:9px">(auto)</span></label>
+            <input type="number" class="form-input" id="in-price" placeholder="2,400,000" step="0.01">
+          </div>
+          <button type="submit" class="btn" id="add-btn">บันทึก</button>
+        </div>
+      </form>
+      <p style="margin-top:14px;font-size:12px;color:var(--text-muted)">
+        💡 บันทึกแล้วจะ sync ไปที่ Google Sheet ทันที
+      </p>
+    </div>
+
+    <div class="form-card">
+      <div class="form-title">📥 Migration Tools</div>
+      <p style="font-size:13px;color:var(--text-dim);margin-bottom:14px">
+        Import CSV รูปแบบ <code style="background:var(--bg-elevated);padding:2px 6px;border-radius:4px">date,thb,sat,price</code> — จะ <strong style="color:var(--red)">แทนที่ทั้งหมด</strong> ใน Sheet
+      </p>
+      <input type="file" id="csv-file" accept=".csv" style="display:none">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost" onclick="document.getElementById('csv-file').click()">📂 Import CSV</button>
+        <button class="btn btn-ghost" onclick="exportCSV()">📤 Export CSV</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-records">
+    <div class="table-wrap">
+      <div class="table-header">
+        <div>
+          <div style="font-family:'Sora',sans-serif;font-weight:600;font-size:15px">All Records</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px" id="records-count">0 entries</div>
+        </div>
+        <div class="table-actions">
+          <button class="btn btn-ghost" onclick="syncFromSheet()">🔄 Refresh</button>
+          <button class="btn btn-ghost" onclick="exportCSV()">Export CSV</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="records-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th class="num-col">THB</th>
+              <th class="num-col">Sats ⚡</th>
+              <th class="num-col">Price/BTC</th>
+              <th class="actions-col"></th>
+            </tr>
+          </thead>
+          <tbody id="records-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-settings">
+    <div class="form-card">
+      <div class="form-title">🔗 Google Sheet Connection</div>
+      <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px;line-height:1.6">
+        เว็บนี้เชื่อมกับ Google Sheet ผ่าน Apps Script Web App<br>
+        Auto-refresh ทุก 60 วินาที
+      </p>
+      <div class="form-group" style="margin-bottom:12px">
+        <label class="form-label">Web App URL</label>
+        <input type="text" class="form-input" id="settings-url" readonly style="font-size:11px">
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost" onclick="syncFromSheet()">🔄 Sync ตอนนี้</button>
+        <button class="btn btn-danger" onclick="disconnect()">🔌 Disconnect & Reset</button>
+      </div>
+    </div>
+    <div class="form-card">
+      <div class="form-title">📖 About Sats</div>
+      <p style="font-size:13px;color:var(--text-dim);line-height:1.7">
+        <b style="color:var(--text)">1 BTC = 100,000,000 Satoshi</b><br>
+        Satoshi (sat) เป็นหน่วยที่เล็กที่สุดของ Bitcoin ตั้งชื่อตาม Satoshi Nakamoto ผู้สร้าง<br>
+        ราคา BTC ดึงจาก CoinGecko API ทุก 2 นาที
+      </p>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-title" id="modal-title">Confirm</div>
+    <div class="modal-text" id="modal-text">Are you sure?</div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">ยกเลิก</button>
+      <button class="btn btn-danger" id="modal-confirm">ยืนยัน</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// =============== STATE ===============
+let records = [];
+let currentPrice = null;
+let charts = {};
+let config = null;
+
+const CONFIG_KEY = 'btc_dca_sheet_config';
+const PRICE_CACHE_KEY = 'btc_price_cache_v1';
+
+// =============== UTILS ===============
+const fmt = {
+  sat: n => n.toLocaleString('en-US'),
+  thb: n => '฿' + n.toLocaleString('en-US', {maximumFractionDigits: 0}),
+  thbFull: n => n.toLocaleString('en-US', {maximumFractionDigits: 2}) + ' THB',
+  pct: n => (n >= 0 ? '+' : '') + n.toFixed(2) + '%',
+  date: s => {
+    const d = new Date(s);
+    return d.toLocaleDateString('th-TH', {day:'2-digit', month:'short', year:'numeric'});
+  }
+};
+
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  setTimeout(() => t.className = 'toast ' + type, 2400);
+}
+
+function setSyncStatus(state, text) {
+  const dot = document.getElementById('sync-dot');
+  const txt = document.getElementById('sync-text');
+  dot.className = 'sync-dot ' + state;
+  txt.textContent = text;
+}
+
+// =============== CONFIG ===============
+function loadConfig() {
+  try {
+    const raw = localStorage.getItem(CONFIG_KEY);
+    config = raw ? JSON.parse(raw) : null;
+  } catch (e) { config = null; }
+}
+
+function saveConfig(url, password) {
+  config = {url, password};
+  localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+}
+
+function disconnect() {
+  openModal('Disconnect?', 'จะตัดการเชื่อมกับ Google Sheet — ข้อมูลใน Sheet จะไม่ถูกลบ แต่ต้อง setup ใหม่', () => {
+    localStorage.removeItem(CONFIG_KEY);
+    closeModal();
+    location.reload();
+  });
+}
+
+// =============== API ===============
+async function apiGet() {
+  const url = config.url + '?password=' + encodeURIComponent(config.password);
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+async function apiPost(action, payload = {}) {
+  const body = {action, password: config.password, ...payload};
+  const res = await fetch(config.url, {
+    method: 'POST',
+    body: JSON.stringify(body),
+    redirect: 'follow',
+    headers: {'Content-Type': 'text/plain;charset=utf-8'}
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+async function syncFromSheet() {
+  setSyncStatus('syncing', 'กำลัง sync...');
+  try {
+    const data = await apiGet();
+    records = data.records || [];
+    records.sort((a, b) => a.date.localeCompare(b.date));
+    renderAll();
+    setSyncStatus('connected', `Synced • ${records.length} records`);
+    return true;
+  } catch (err) {
+    setSyncStatus('error', 'Sync failed');
+    showToast('Sync ไม่สำเร็จ: ' + err.message, 'error');
+    return false;
+  }
+}
+
+// =============== SETUP ===============
+document.getElementById('setup-connect').addEventListener('click', async () => {
+  const url = document.getElementById('setup-url').value.trim();
+  const password = document.getElementById('setup-password').value;
+  const status = document.getElementById('setup-status');
+  const btn = document.getElementById('setup-connect');
+
+  if (!url || !password) {
+    status.textContent = '❌ กรุณากรอก URL และ Password';
+    status.style.color = 'var(--red)';
+    return;
+  }
+
+  if (!url.includes('script.google.com')) {
+    status.textContent = '❌ URL ต้องเป็น Apps Script Web App URL';
+    status.style.color = 'var(--red)';
+    return;
+  }
+
+  btn.disabled = true;
+  status.textContent = '⏳ กำลังทดสอบการเชื่อมต่อ...';
+  status.style.color = 'var(--text-dim)';
+
+  try {
+    config = {url, password};
+    const res = await fetch(config.url, {
+      method: 'POST',
+      body: JSON.stringify({action: 'ping', password}),
+      redirect: 'follow',
+      headers: {'Content-Type': 'text/plain;charset=utf-8'}
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    saveConfig(url, password);
+    status.textContent = '✅ เชื่อมต่อสำเร็จ! กำลังโหลดข้อมูล...';
+    status.style.color = 'var(--green)';
+
+    setTimeout(() => initApp(), 800);
+  } catch (err) {
+    config = null;
+    btn.disabled = false;
+    status.textContent = '❌ ' + err.message;
+    status.style.color = 'var(--red)';
+  }
+});
+
+// =============== STATS ===============
+function renderStats() {
+  const totalSat = records.reduce((s, r) => s + r.sat, 0);
+  const totalThb = records.reduce((s, r) => s + r.thb, 0);
+  const totalBtc = totalSat / 100000000;
+  const avgCost = totalBtc > 0 ? totalThb / totalBtc : 0;
+
+  document.getElementById('stat-sats').textContent = fmt.sat(totalSat);
+  document.getElementById('stat-btc').textContent = totalBtc.toFixed(8);
+  document.getElementById('stat-cost').textContent = fmt.thb(totalThb);
+  document.getElementById('stat-avg').textContent = avgCost > 0 ? fmt.thb(avgCost) : '—';
+
+  if (currentPrice && totalBtc > 0) {
+    const portfolioValue = totalBtc * currentPrice;
+    const pnl = portfolioValue - totalThb;
+    const pnlPct = (pnl / totalThb) * 100;
+    document.getElementById('stat-value').textContent = fmt.thb(portfolioValue);
+    const pnlEl = document.getElementById('stat-pnl');
+    const cls = pnl >= 0 ? 'pos' : 'neg';
+    pnlEl.innerHTML = `<span class="${cls}">${pnl >= 0 ? '+' : ''}${fmt.thb(pnl)} (${fmt.pct(pnlPct)})</span>`;
+
+    const diff = ((currentPrice - avgCost) / avgCost) * 100;
+    const diffCls = diff >= 0 ? 'pos' : 'neg';
+    document.getElementById('stat-avg-sub').innerHTML = `<span class="${diffCls}">market ${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%</span>`;
+  } else {
+    document.getElementById('stat-value').textContent = '—';
+    document.getElementById('stat-pnl').textContent = '—';
+  }
+}
+
+// =============== PRICE FETCH ===============
+async function fetchPrice() {
+  const btn = document.getElementById('refresh-price');
+  btn.classList.add('spinning');
+  try {
+    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=thb');
+    const data = await res.json();
+    currentPrice = data.bitcoin.thb;
+    localStorage.setItem(PRICE_CACHE_KEY, JSON.stringify({price: currentPrice, ts: Date.now()}));
+    updatePriceUI();
+    renderStats();
+    if (charts.avgCost) renderAvgCostChart();
+  } catch (e) {
+    const cached = localStorage.getItem(PRICE_CACHE_KEY);
+    if (cached) {
+      currentPrice = JSON.parse(cached).price;
+      updatePriceUI();
+      renderStats();
+    }
+  }
+  btn.classList.remove('spinning');
+}
+
+function updatePriceUI() {
+  document.getElementById('ticker-price').textContent = currentPrice
+    ? '฿' + currentPrice.toLocaleString('en-US', {maximumFractionDigits: 0})
+    : '—';
+}
+
+// =============== CHARTS ===============
+Chart.defaults.color = '#8a8aa0';
+Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+Chart.defaults.font.family = "'Sora', 'Noto Sans Thai', sans-serif";
+
+function renderCumulativeChart() {
+  const ctx = document.getElementById('chart-cumulative').getContext('2d');
+  if (charts.cumulative) charts.cumulative.destroy();
+
+  let cum = 0;
+  const points = records.map(r => {
+    cum += r.sat;
+    return {x: r.date, y: cum};
+  });
+
+  charts.cumulative = new Chart(ctx, {
+    type: 'line',
+    data: {
+      datasets: [{
+        label: 'Cumulative Sats',
+        data: points,
+        borderColor: '#f7931a',
+        backgroundColor: (ctx) => {
+          const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, 280);
+          g.addColorStop(0, 'rgba(247,147,26,0.4)');
+          g.addColorStop(1, 'rgba(247,147,26,0)');
+          return g;
+        },
+        fill: true, tension: 0.3, borderWidth: 2,
+        pointRadius: 0, pointHoverRadius: 5,
+        pointHoverBackgroundColor: '#f7931a'
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: {mode: 'index', intersect: false},
+      plugins: {
+        legend: {display: false},
+        tooltip: {
+          backgroundColor: '#000', borderColor: '#3a3a4a', borderWidth: 1, padding: 10,
+          callbacks: { label: (ctx) => `${fmt.sat(ctx.parsed.y)} sats (${(ctx.parsed.y/1e8).toFixed(8)} BTC)` }
+        }
+      },
+      scales: {
+        x: {type: 'time', time: {unit: 'month'}, grid: {color: 'rgba(255,255,255,0.03)'}},
+        y: { grid: {color: 'rgba(255,255,255,0.03)'}, ticks: {callback: v => v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v} }
+      }
+    }
+  });
+  document.getElementById('chart1-meta').textContent = `${records.length} entries`;
+}
+
+function renderMonthlyChart() {
+  const ctx = document.getElementById('chart-monthly').getContext('2d');
+  if (charts.monthly) charts.monthly.destroy();
+
+  const byMonth = {};
+  records.forEach(r => {
+    const key = r.date.slice(0, 7);
+    if (!byMonth[key]) byMonth[key] = {thb: 0, sat: 0};
+    byMonth[key].thb += r.thb;
+    byMonth[key].sat += r.sat;
+  });
+  const labels = Object.keys(byMonth).sort();
+  const values = labels.map(k => byMonth[k].thb);
+
+  charts.monthly = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels.map(l => {
+        const [y, m] = l.split('-');
+        return new Date(y, m-1).toLocaleDateString('en-US', {month: 'short'});
+      }),
+      datasets: [{
+        data: values,
+        backgroundColor: 'rgba(247,147,26,0.7)',
+        hoverBackgroundColor: '#f7931a',
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: {display: false},
+        tooltip: {
+          backgroundColor: '#000',
+          callbacks: {
+            label: (ctx) => {
+              const k = labels[ctx.dataIndex];
+              return [`${fmt.thb(byMonth[k].thb)}`, `${fmt.sat(byMonth[k].sat)} sats`];
+            }
+          }
+        }
+      },
+      scales: {
+        x: {grid: {display: false}},
+        y: {grid: {color: 'rgba(255,255,255,0.03)'}, ticks: {callback: v => '฿'+(v>=1000?(v/1000).toFixed(0)+'K':v)}}
+      }
+    }
+  });
+}
+
+function renderAvgCostChart() {
+  const ctx = document.getElementById('chart-avgcost').getContext('2d');
+  if (charts.avgCost) charts.avgCost.destroy();
+
+  let cumThb = 0, cumSat = 0;
+  const avgPoints = [];
+  const pricePoints = [];
+  records.forEach(r => {
+    cumThb += r.thb;
+    cumSat += r.sat;
+    const avg = cumThb / (cumSat / 1e8);
+    avgPoints.push({x: r.date, y: avg});
+    pricePoints.push({x: r.date, y: r.price});
+  });
+
+  const datasets = [
+    { label: 'Market Price', data: pricePoints, borderColor: 'rgba(138,138,160,0.6)', borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false },
+    { label: 'Avg Cost', data: avgPoints, borderColor: '#f7931a', borderWidth: 2.5, pointRadius: 0, tension: 0.3, fill: false }
+  ];
+
+  if (currentPrice && records.length) {
+    datasets.push({
+      label: 'Current Price',
+      data: [{x: records[0].date, y: currentPrice}, {x: records[records.length-1].date, y: currentPrice}],
+      borderColor: '#4ade80', borderWidth: 1, borderDash: [5, 5], pointRadius: 0, fill: false
+    });
+  }
+
+  charts.avgCost = new Chart(ctx, {
+    type: 'line',
+    data: {datasets},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: {mode: 'index', intersect: false},
+      plugins: {
+        legend: {position: 'top', labels: {boxWidth: 10, font: {size: 11}, padding: 12}},
+        tooltip: { backgroundColor: '#000', callbacks: {label: (ctx) => `${ctx.dataset.label}: ${fmt.thb(ctx.parsed.y)}`} }
+      },
+      scales: {
+        x: {type: 'time', time: {unit: 'month'}, grid: {color: 'rgba(255,255,255,0.03)'}},
+        y: {grid: {color: 'rgba(255,255,255,0.03)'}, ticks: {callback: v => '฿'+(v/1e6).toFixed(1)+'M'}}
+      }
+    }
+  });
+}
+
+function renderHeatmap() {
+  const container = document.getElementById('heatmap-container');
+  container.innerHTML = '';
+
+  if (records.length === 0) {
+    container.innerHTML = '<div class="empty-state">ยังไม่มีข้อมูล</div>';
+    return;
+  }
+
+  const byDay = {};
+  records.forEach(r => {
+    if (!byDay[r.date]) byDay[r.date] = 0;
+    byDay[r.date] += r.thb;
+  });
+  const maxThb = Math.max(...Object.values(byDay));
+
+  const months = {};
+  records.forEach(r => {
+    const monthKey = r.date.slice(0, 7);
+    if (!months[monthKey]) months[monthKey] = [];
+  });
+
+  const monthKeys = Object.keys(months).sort();
+  document.getElementById('heatmap-meta').textContent = `${Object.keys(byDay).length} active days`;
+
+  const wrap = document.createElement('div');
+  wrap.style.display = 'grid';
+  wrap.style.gridTemplateColumns = 'repeat(auto-fit, minmax(280px, 1fr))';
+  wrap.style.gap = '20px';
+
+  monthKeys.forEach(monthKey => {
+    const [y, m] = monthKey.split('-').map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const monthDiv = document.createElement('div');
+
+    const label = document.createElement('div');
+    label.className = 'heatmap-month-label';
+    label.textContent = new Date(y, m-1).toLocaleDateString('en-US', {month: 'long', year: 'numeric'});
+    monthDiv.appendChild(label);
+
+    const grid = document.createElement('div');
+    grid.className = 'heatmap-grid';
+    grid.style.gridTemplateColumns = 'repeat(' + daysInMonth + ', 1fr)';
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const cell = document.createElement('div');
+      cell.className = 'heatmap-cell';
+      const v = byDay[dateStr] || 0;
+      if (v > 0) {
+        const intensity = Math.min(1, v / maxThb);
+        const opacity = 0.2 + intensity * 0.8;
+        cell.style.background = `rgba(247,147,26,${opacity})`;
+        cell.dataset.tooltip = `${fmt.date(dateStr)}\n${fmt.thb(v)}`;
+      } else {
+        cell.classList.add('empty');
+      }
+      grid.appendChild(cell);
+    }
+    monthDiv.appendChild(grid);
+    wrap.appendChild(monthDiv);
+  });
+  container.appendChild(wrap);
+
+  const tooltip = document.getElementById('tooltip');
+  container.querySelectorAll('.heatmap-cell').forEach(cell => {
+    if (!cell.dataset.tooltip) return;
+    cell.addEventListener('mouseenter', () => {
+      tooltip.innerHTML = cell.dataset.tooltip.replace('\n', '<br>');
+      tooltip.style.display = 'block';
+    });
+    cell.addEventListener('mousemove', (e) => {
+      tooltip.style.left = (e.clientX + 12) + 'px';
+      tooltip.style.top = (e.clientY + 12) + 'px';
+    });
+    cell.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+  });
+}
+
+function renderRecords() {
+  const tbody = document.getElementById('records-tbody');
+  tbody.innerHTML = '';
+  document.getElementById('records-count').textContent = `${records.length} entries`;
+
+  if (records.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">ยังไม่มีข้อมูล — เริ่มบันทึกที่แท็บ Add Entry</td></tr>';
+    return;
+  }
+
+  const sorted = [...records].sort((a, b) => b.date.localeCompare(a.date));
+  sorted.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${fmt.date(r.date)}</td>
+      <td class="num-col">${fmt.thbFull(r.thb)}</td>
+      <td class="num-col">${fmt.sat(r.sat)}</td>
+      <td class="num-col">${fmt.thb(r.price)}</td>
+      <td class="actions-col"><button class="delete-btn" data-date="${r.date}" data-sat="${r.sat}" title="Delete">×</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll('.delete-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const date = btn.dataset.date;
+      const sat = parseInt(btn.dataset.sat);
+      openModal('ลบรายการ?', `${fmt.date(date)} — ${fmt.sat(sat)} sats — จะลบจาก Google Sheet ด้วย`, async () => {
+        closeModal();
+        setSyncStatus('syncing', 'กำลังลบ...');
+        try {
+          await apiPost('delete', {date, sat});
+          await syncFromSheet();
+          showToast('ลบรายการแล้ว');
+        } catch (err) {
+          setSyncStatus('error', 'Delete failed');
+          showToast('ลบไม่สำเร็จ: ' + err.message, 'error');
+        }
+      });
+    });
+  });
+}
+
+function renderAll() {
+  renderStats();
+  renderCumulativeChart();
+  renderMonthlyChart();
+  renderAvgCostChart();
+  renderHeatmap();
+  renderRecords();
+}
+
+// =============== ADD ENTRY ===============
+document.getElementById('add-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const date = document.getElementById('in-date').value;
+  const thb = parseFloat(document.getElementById('in-thb').value);
+  const sat = parseInt(document.getElementById('in-sat').value);
+  let price = parseFloat(document.getElementById('in-price').value);
+
+  if (!date || !thb || !sat) {
+    showToast('กรอกข้อมูลให้ครบ', 'error');
+    return;
+  }
+  if (!price) price = thb / (sat / 1e8);
+
+  const btn = document.getElementById('add-btn');
+  btn.disabled = true;
+  btn.textContent = 'กำลังบันทึก...';
+  setSyncStatus('syncing', 'กำลังบันทึก...');
+
+  try {
+    await apiPost('add', {record: {date, thb, sat, price}});
+    await syncFromSheet();
+    showToast(`บันทึก ${fmt.sat(sat)} sats ไปยัง Sheet สำเร็จ`);
+    document.getElementById('in-thb').value = '';
+    document.getElementById('in-sat').value = '';
+    document.getElementById('in-price').value = '';
+  } catch (err) {
+    setSyncStatus('error', 'Add failed');
+    showToast('บันทึกไม่สำเร็จ: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'บันทึก';
+  }
+});
+
+['in-thb', 'in-sat'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    const thb = parseFloat(document.getElementById('in-thb').value);
+    const sat = parseInt(document.getElementById('in-sat').value);
+    if (thb && sat) {
+      const calc = thb / (sat / 1e8);
+      document.getElementById('in-price').value = calc.toFixed(2);
+    }
+  });
+});
+
+// =============== CSV ===============
+function exportCSV() {
+  if (records.length === 0) {
+    showToast('ยังไม่มีข้อมูลให้ export', 'error');
+    return;
+  }
+  let csv = 'date,thb,sat,price\n';
+  records.forEach(r => {
+    csv += `${r.date},${r.thb},${r.sat},${r.price}\n`;
+  });
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `btc_dca_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Export สำเร็จ');
+}
+
+document.getElementById('csv-file').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async (ev) => {
+    const lines = ev.target.result.split('\n').filter(l => l.trim());
+    const header = lines[0].toLowerCase();
+    if (!header.includes('date') || !header.includes('thb') || !header.includes('sat')) {
+      showToast('รูปแบบ CSV ไม่ถูกต้อง', 'error');
+      return;
+    }
+    const newRecs = [];
+    for (let i = 1; i < lines.length; i++) {
+      const parts = lines[i].split(',').map(s => s.trim());
+      if (parts.length < 3) continue;
+      const [date, thb, sat, price] = parts;
+      const t = parseFloat(thb), s = parseInt(sat);
+      if (!date || isNaN(t) || isNaN(s)) continue;
+      const p = price ? parseFloat(price) : (t / (s / 1e8));
+      newRecs.push({date, thb: t, sat: s, price: p});
+    }
+    if (newRecs.length === 0) {
+      showToast('ไม่พบข้อมูลใน CSV', 'error');
+      return;
+    }
+    openModal('Import CSV?', `จะแทนที่ข้อมูลทั้งหมดใน Sheet ด้วย ${newRecs.length} รายการจาก CSV — ยืนยัน?`, async () => {
+      closeModal();
+      setSyncStatus('syncing', 'กำลัง import...');
+      try {
+        await apiPost('bulkImport', {records: newRecs});
+        await syncFromSheet();
+        showToast(`Import ${newRecs.length} รายการสำเร็จ`);
+      } catch (err) {
+        setSyncStatus('error', 'Import failed');
+        showToast('Import ไม่สำเร็จ: ' + err.message, 'error');
+      }
+    });
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+// =============== MODAL ===============
+let modalCallback = null;
+function openModal(title, text, cb) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-text').textContent = text;
+  document.getElementById('modal').classList.add('show');
+  modalCallback = cb;
+}
+function closeModal() {
+  document.getElementById('modal').classList.remove('show');
+  modalCallback = null;
+}
+document.getElementById('modal-confirm').addEventListener('click', () => modalCallback && modalCallback());
+document.getElementById('modal').addEventListener('click', (e) => { if (e.target.id === 'modal') closeModal(); });
+
+// =============== TABS ===============
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+// =============== INIT ===============
+document.getElementById('refresh-price').addEventListener('click', fetchPrice);
+document.getElementById('in-date').valueAsDate = new Date();
+
+async function initApp() {
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('main-app').style.display = 'block';
+  document.getElementById('settings-url').value = config.url;
+
+  await fetchPrice();
+  await syncFromSheet();
+
+  // Auto-refresh every 60 sec
+  setInterval(syncFromSheet, 60000);
+  setInterval(fetchPrice, 120000);
+}
+
+loadConfig();
+if (config && config.url && config.password) {
+  initApp();
+} else {
+  document.getElementById('setup-screen').style.display = 'block';
+}
+</script>
+</body>
+</html>
